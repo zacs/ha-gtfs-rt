@@ -14,10 +14,8 @@ import homeassistant.helpers.config_validation as cv
 _LOGGER = logging.getLogger(__name__)
 
 REQUIREMENTS = [
-    'https://github.com/google/gtfs-realtime-bindings'
-    '/archive/619187a2c99d7396cd56bf9c24d302d2373acff2.zip'
-    '#gtfs-realtime-bindings==0.0.5&egg=gtfs-realtime-bindings&subdirectory=python',
-    'protobuf==3.0.0a3'
+    'gtfs-realtime-bindings==0.0.5',
+    'protobuf==3.6.1'
 ]
 
 ATTR_STOP_ID = "Stop ID"
@@ -26,6 +24,7 @@ ATTR_DUE_IN = "Due in"
 ATTR_DUE_AT = "Due at"
 ATTR_NEXT_UP = "Later Bus"
 
+CONF_API_KEY = 'api_key'
 CONF_STOP_ID = 'stopid'
 CONF_ROUTE = 'route'
 CONF_DEPARTURES = 'departures'
@@ -41,6 +40,7 @@ TIME_STR_FORMAT = "%H:%M"
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_TRIP_UPDATE_URL): cv.string,
+    vol.Optional(CONF_API_KEY): cv.string,
     vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
     vol.Optional(CONF_DEPARTURES): [{
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
@@ -58,7 +58,7 @@ def due_in_minutes(timestamp):
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Get the Dublin public transport sensor."""
-    data = PublicTransportData(config.get(CONF_TRIP_UPDATE_URL), config.get(CONF_VEHICLE_POSITION_URL))
+    data = PublicTransportData(config.get(CONF_TRIP_UPDATE_URL), config.get(CONF_VEHICLE_POSITION_URL), config.get(CONF_API_KEY))
     sensors = []
     for departure in config.get(CONF_DEPARTURES):
         sensors.append(PublicTransportSensor(
@@ -131,10 +131,14 @@ class PublicTransportSensor(Entity):
 class PublicTransportData(object):
     """The Class for handling the data retrieval."""
 
-    def __init__(self, trip_update_url, vehicle_position_url=None):
+    def __init__(self, trip_update_url, vehicle_position_url=None, api_key=None):
         """Initialize the info object."""
         self._trip_update_url = trip_update_url
         self._vehicle_position_url = vehicle_position_url
+        if api_key is not None:
+            self._headers = {'Authorization': api_key}
+        else:
+            self._headers = None
         self.info = {}
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
@@ -152,7 +156,9 @@ class PublicTransportData(object):
                 self.position = position
 
         feed = gtfs_realtime_pb2.FeedMessage()
-        response = requests.get(self._trip_update_url)
+        response = requests.get(self._trip_update_url, headers=self._headers)
+        if response.status_code != 200:
+            _LOGGER.error("updating route status got {}:{}".format(response.status_code,response.content))
         feed.ParseFromString(response.content)
         departure_times = {}
 
@@ -183,7 +189,9 @@ class PublicTransportData(object):
     def _get_vehicle_positions(self):
         from google.transit import gtfs_realtime_pb2
         feed = gtfs_realtime_pb2.FeedMessage()
-        response = requests.get(self._vehicle_position_url)
+        response = requests.get(self._vehicle_position_url, headers=self._headers)
+        if response.status_code != 200:
+            _LOGGER.error("updating vehicle positions got {}:{}.".format(response.status_code, response.content))
         feed.ParseFromString(response.content)
         positions = {}
 
