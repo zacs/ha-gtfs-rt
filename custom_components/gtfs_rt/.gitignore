@@ -105,3 +105,6 @@ venv.bak/
 
 # Build Artifacts
 ._*
+
+# Mac
+.DS_Store
