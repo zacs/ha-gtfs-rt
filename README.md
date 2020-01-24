@@ -20,7 +20,7 @@ local transit systems that provide gtfs feeds.
 Add the following to your `configuration.yaml` file:
 
 ```yaml
-# Example configuration.yaml entry
+# Example entry for Austin TX
 
 sensor:
   - platform: gtfs_rt
@@ -32,9 +32,21 @@ sensor:
       stopid: 514
 ```
 
+```yaml
+# Example entry for Seattle WA
+
+- platform: gtfs_rt
+  trip_update_url: 'http://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/1.pb?key=TEST'
+  departures:
+  - name: "48 to Uni"
+    route: 100228
+    stopid: 36800
+```
+
+
 Configuration variables:
 
-- **trip_update_url** (*Required*): Provides bus route etas. See the `Finding Feeds` section at the bottom of the page for more details on how to find these
+- **trip_update_url** (*Required*): Provides bus route etas. See the **Finding Feeds** section at the bottom of the page for more details on how to find these
 - **vehicle_position_url** (*Optional*): Provides live bus position tracking on the home assistant map
 - **api_key** (*Optional*): If provided, this key will be sent with API
 requests in an "Authorization" header.
