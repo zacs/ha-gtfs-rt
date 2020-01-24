@@ -22,7 +22,7 @@ ATTR_STOP_ID = "Stop ID"
 ATTR_ROUTE = "Route"
 ATTR_DUE_IN = "Due in"
 ATTR_DUE_AT = "Due at"
-ATTR_NEXT_UP = "Later Bus"
+ATTR_NEXT_UP = "Next bus"
 
 CONF_API_KEY = 'api_key'
 CONF_STOP_ID = 'stopid'
@@ -72,7 +72,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 
 
 class PublicTransportSensor(Entity):
-    """Implementation of an Austin public transport sensor."""
+    """Implementation of a public transport sensor."""
 
     def __init__(self, data, stop, route, name):
         """Initialize the sensor."""
