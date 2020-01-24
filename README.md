@@ -3,20 +3,27 @@
 This project contains a new sensor that provides real-time departure data for
 local transit systems that provide gtfs feeds.
 
-## Installation
+## Installation (HACS) - Recommended
+0. Have [HACS](https://custom-components.github.io/hacs/installation/manual/) installed, this will allow you to easily update
+1. Add `https://github.com/zacs/ha-gtfs-rt` as a [custom repository](https://custom-components.github.io/hacs/usage/settings/#add-custom-repositories) as Type: Integration
+2. Click install under "GTFS-Realtime", restart your instance.
 
-- Copy file `sensor/gtfs_realtime.py` to your `ha_config_dir/custom-components/sensor` directory.
-- Configure with config below.
-- Restart Home-Assistant.
+## Installation (Manual)
+1. Download this repository as a ZIP (green button, top right) and unzip the archive
+2. Copy `/custom_components/gtfs_rt` to your `<config_dir>/custom_components/` directory
+   * You will need to create the `custom_components` folder if it does not exist
+   * On Hassio the final location will be `/config/custom_components/gtfs_rt`
+   * On Hassbian the final location will be `/home/homeassistant/.homeassistant/custom_components/gtfs_rt`
 
-## Usage
-To use this component in your installation, add the following to your `configuration.yaml` file:
+## Configuration
+
+Add the following to your `configuration.yaml` file:
 
 ```yaml
 # Example configuration.yaml entry
 
 sensor:
-  - platform: gtfs_realtime
+  - platform: gtfs_rt
     trip_update_url: 'https://data.texas.gov/download/rmk2-acnw/application%2foctet-stream'
     vehicle_position_url: 'https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream'
     departures:
@@ -47,3 +54,19 @@ gtfs feeds. Search for your city, and then look for a feed that is tagged with
 use. Routes and stops can be found by clicking on the regular gtfs feed, and
 finding the id for the stop you are interested in. Please feel free to message
 me or open an issue if you find other good sources.
+
+## Reporting an Issue
+
+1. Setup your logger to print debug messages for this component using:
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.gtfs_rt: debug
+```
+2. Restart HA
+3. Verify you're still having the issue
+4. File an issue in this Github Repository containing your HA log (Developer section > Info > Load Full Home Assistant Log)
+   * You can paste your log file at pastebin https://pastebin.com/ and submit a link.
+   * Please include details about your setup (Pi, NUC, etc, docker?, HASSOS?)
+   * The log file can also be found at `/<config_dir>/home-assistant.log`
