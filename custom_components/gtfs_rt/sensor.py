@@ -25,6 +25,7 @@ ATTR_DUE_AT = "Due at"
 ATTR_NEXT_UP = "Next bus"
 
 CONF_API_KEY = 'api_key'
+CONF_X_API_KEY = 'x_api_key'
 CONF_STOP_ID = 'stopid'
 CONF_ROUTE = 'route'
 CONF_DEPARTURES = 'departures'
