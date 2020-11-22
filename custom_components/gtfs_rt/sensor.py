@@ -137,6 +137,8 @@ class PublicTransportData(object):
         self._vehicle_position_url = vehicle_position_url
         if api_key is not None:
             self._headers = {'Authorization': api_key}
+        elif x_api_key is not None:
+            self._headers = {'x-api-key': x_api_key}
         else:
             self._headers = None
         self.info = {}
