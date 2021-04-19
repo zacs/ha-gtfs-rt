@@ -43,6 +43,17 @@ sensor:
     stopid: 36800
 ```
 
+```yaml
+# Example entry for NYC
+
+- platform: gtfs_rt
+    trip_update_url: 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm'
+    x_api_key: <api key>
+    departures:
+      - name: "Brooklyn F"
+        route: 'F'
+        stopid: 'F16S'
+```
 
 Configuration variables:
 
@@ -50,6 +61,8 @@ Configuration variables:
 - **vehicle_position_url** (*Optional*): Provides live bus position tracking on the home assistant map
 - **api_key** (*Optional*): If provided, this key will be sent with API
 requests in an "Authorization" header.
+- **x_api_key** (*Optional*): If provided, this key will be sent with API
+requests in an "x-api-key" header.
 - **departures** (*Required*): A list of routes and departure locations to watch
 - **route** (*Optional*): The name of the gtfs route
 - **stopid** (*Optional*): The stopid for the location you want etas for
