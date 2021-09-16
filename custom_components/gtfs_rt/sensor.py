@@ -13,11 +13,6 @@ import homeassistant.helpers.config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
 
-REQUIREMENTS = [
-    'gtfs-realtime-bindings==0.0.5',
-    'protobuf==3.6.1'
-]
-
 ATTR_STOP_ID = "Stop ID"
 ATTR_ROUTE = "Route"
 ATTR_DUE_IN = "Due in"
