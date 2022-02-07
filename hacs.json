@@ -1,0 +1,5 @@
+{
+  "name": "GTFS-Realtime",
+  "render_readme": true,
+  "domains": ["sensor"]
+}
