@@ -52,7 +52,7 @@ sensor:
   apikey: <api key>
   departures:
   - name: "Bus 178"
-    route: 178
+    route: 168
     stopid: 56698 
 ```
 
