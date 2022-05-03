@@ -93,7 +93,7 @@ class PublicTransportSensor(Entity):
         return due_in_minutes(next_buses[0].arrival_time) if len(next_buses) > 0 else '-'
 
     @property
-    def device_state_attributes(self):
+    def extra_state_attributes(self):
         """Return the state attributes."""
         next_buses = self._get_next_buses()
         attrs = {
