@@ -44,6 +44,19 @@ sensor:
 ```
 
 ```yaml
+# Example entry for Montreal
+
+- platform: gtfs_rt
+  trip_update_url: 'https://api.stm.info/pub/od/gtfs-rt/ic/v2/tripUpdates'
+  vehicle_position_url: 'https://api.stm.info/pub/od/gtfs-rt/ic/v2/vehiclePositions'
+  apikey: <api key>
+  departures:
+  - name: "Bus 178"
+    route: 168
+    stopid: 56698 
+```
+
+```yaml
 # Example entry for NYC
 
 - platform: gtfs_rt
