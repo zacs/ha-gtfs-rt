@@ -177,12 +177,15 @@ class PublicTransportData(object):
                     stop_id = stop.stop_id
                     if not departure_times[route_id].get(stop_id):
                         departure_times[route_id][stop_id] = []
-                    # Use stop departure time; fall back on stop arrival time if not available
-                    details = StopDetails(
-                        datetime.datetime.fromtimestamp(stop.arrival.time),
-                        vehicle_positions.get(entity.trip_update.vehicle.id)
-                    )
-                    departure_times[route_id][stop_id].append(details)
+                    # Keep only future arrival.time 
+                    import time
+                    if int(stop.arrival.time) > int(time.time()):
+                        # Use stop departure time; fall back on stop arrival time if not available
+                        details = StopDetails(
+                            datetime.datetime.fromtimestamp(stop.arrival.time),
+                            vehicle_positions.get(entity.trip_update.vehicle.id)
+                        )
+                        departure_times[route_id][stop_id].append(details)
 
         # Sort by arrival time
         for route in departure_times:
