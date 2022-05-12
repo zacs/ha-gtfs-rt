@@ -1,6 +1,8 @@
 import datetime
 import logging
 import requests
+import time
+from enum import Enum
 
 import voluptuous as vol
 
@@ -17,8 +19,10 @@ ATTR_STOP_ID = "Stop ID"
 ATTR_ROUTE = "Route"
 ATTR_DUE_IN = "Due in"
 ATTR_DUE_AT = "Due at"
+ATTR_OCCUPANCY = "Occupancy"
 ATTR_NEXT_UP = "Next bus"
 ATTR_NEXT_UP_DUE_IN = "Next bus due in"
+ATTR_NEXT_OCCUPANCY = "Next bus occupancy"
 
 CONF_API_KEY = 'api_key'
 CONF_APIKEY = 'apikey'
@@ -49,6 +53,16 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     }]
 })
 
+class OccupancyStatus(Enum):
+    EMPTY = 0
+    MANY_SEATS_AVAILABLE = 1
+    FEW_SEATS_AVAILABLE = 2
+    STANDING_ROOM_ONLY = 3
+    CRUSHED_STANDING_ROOM_ONLY = 4
+    FULL = 5
+    NOT_ACCEPTING_PASSENGERS = 6
+    NO_DATA_AVAILABLE = 7
+    NOT_BOARDABLE = 8
 
 def due_in_minutes(timestamp):
     """Get the remaining minutes from now until a given datetime object."""
@@ -106,12 +120,14 @@ class PublicTransportSensor(Entity):
         }
         if len(next_buses) > 0:
             attrs[ATTR_DUE_AT] = next_buses[0].arrival_time.strftime(TIME_STR_FORMAT) if len(next_buses) > 0 else '-'
+            attrs[ATTR_OCCUPANCY] = next_buses[0].occupancy
             if next_buses[0].position:
                 attrs[ATTR_LATITUDE] = next_buses[0].position.latitude
                 attrs[ATTR_LONGITUDE] = next_buses[0].position.longitude
         if len(next_buses) > 1:
             attrs[ATTR_NEXT_UP] = next_buses[1].arrival_time.strftime(TIME_STR_FORMAT) if len(next_buses) > 1 else '-'
             attrs[ATTR_NEXT_UP_DUE_IN] = due_in_minutes(next_buses[1].arrival_time) if len(next_buses) > 1 else '-'
+            attrs[ATTR_NEXT_OCCUPANCY] = next_buses[1].occupancy
         return attrs
 
     @property
@@ -148,17 +164,18 @@ class PublicTransportData(object):
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
-        positions = self._get_vehicle_positions() if self._vehicle_position_url else {}
-        self._update_route_statuses(positions)
+        positions, vehicles_trips, occupancy = self._get_vehicle_positions() if self._vehicle_position_url else {}
+        self._update_route_statuses(positions, vehicles_trips, occupancy)
 
-    def _update_route_statuses(self, vehicle_positions):
+    def _update_route_statuses(self, vehicle_positions, vehicles_trips, vehicle_occupancy):
         """Get the latest data."""
         from google.transit import gtfs_realtime_pb2
 
         class StopDetails:
-            def __init__(self, arrival_time, position):
+            def __init__(self, arrival_time, position, occupancy):
                 self.arrival_time = arrival_time
                 self.position = position
+                self.occupancy = occupancy
 
         feed = gtfs_realtime_pb2.FeedMessage()
         response = requests.get(self._trip_update_url, headers=self._headers)
@@ -166,24 +183,29 @@ class PublicTransportData(object):
             _LOGGER.error("updating route status got {}:{}".format(response.status_code,response.content))
         feed.ParseFromString(response.content)
         departure_times = {}
-
+        
         for entity in feed.entity:
             if entity.HasField('trip_update'):
                 route_id = entity.trip_update.trip.route_id
+
+                # Get link between vehicle_id from trip_id from vehicles positions if needed
+                vehicle_id = entity.trip_update.vehicle.id
+                if not vehicle_id:
+                    vehicle_id = vehicles_trips.get(entity.trip_update.trip.trip_id)
+
                 if route_id not in departure_times:
                     departure_times[route_id] = {}
-
                 for stop in entity.trip_update.stop_time_update:
                     stop_id = stop.stop_id
                     if not departure_times[route_id].get(stop_id):
                         departure_times[route_id][stop_id] = []
-                    # Keep only future arrival.time 
-                    import time
+                    # Keep only future arrival.time (gtfs data can give past arrival.time, which is useless and show negative time as result)
                     if int(stop.arrival.time) > int(time.time()):
                         # Use stop departure time; fall back on stop arrival time if not available
                         details = StopDetails(
                             datetime.datetime.fromtimestamp(stop.arrival.time),
-                            vehicle_positions.get(entity.trip_update.vehicle.id)
+                            vehicle_positions.get(vehicle_id),
+                            vehicle_occupancy.get(vehicle_id)
                         )
                         departure_times[route_id][stop_id].append(details)
 
@@ -202,14 +224,15 @@ class PublicTransportData(object):
             _LOGGER.error("updating vehicle positions got {}:{}.".format(response.status_code, response.content))
         feed.ParseFromString(response.content)
         positions = {}
+        vehicles_trips = {}
+        occupancy = {}
 
         for entity in feed.entity:
             vehicle = entity.vehicle
-
             if not vehicle.trip.route_id:
                 # Vehicle is not in service
                 continue
-
             positions[vehicle.vehicle.id] = vehicle.position
-
-        return positions
+            vehicles_trips[vehicle.trip.trip_id] = vehicle.vehicle.id
+            occupancy[vehicle.vehicle.id] = OccupancyStatus(vehicle.occupancy_status).name
+        return positions, vehicles_trips, occupancy
