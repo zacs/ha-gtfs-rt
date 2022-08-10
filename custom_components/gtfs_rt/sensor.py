@@ -164,7 +164,7 @@ class PublicTransportData(object):
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
-        positions, vehicles_trips, occupancy = self._get_vehicle_positions() if self._vehicle_position_url else {}
+        positions, vehicles_trips, occupancy = self._get_vehicle_positions() if self._vehicle_position_url else [{}, {}, {}]
         self._update_route_statuses(positions, vehicles_trips, occupancy)
 
     def _update_route_statuses(self, vehicle_positions, vehicles_trips, vehicle_occupancy):
