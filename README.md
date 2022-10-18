@@ -49,7 +49,7 @@ sensor:
 - platform: gtfs_rt
   trip_update_url: 'https://api.stm.info/pub/od/gtfs-rt/ic/v2/tripUpdates'
   vehicle_position_url: 'https://api.stm.info/pub/od/gtfs-rt/ic/v2/vehiclePositions'
-  apikey: <api key>
+  api_key: <api key>
   departures:
   - name: "Bus 178"
     route: 168
@@ -60,12 +60,13 @@ sensor:
 # Example entry for NYC
 
 - platform: gtfs_rt
-    trip_update_url: 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm'
-    x_api_key: <api key>
-    departures:
-      - name: "Brooklyn F"
-        route: 'F'
-        stopid: 'F16S'
+  trip_update_url: 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm'
+  apikey: <api key>
+  header_name: 'X-Api-Key'
+  departures:
+  - name: "Brooklyn F"
+    route: 'F'
+    stopid: 'F16S'
 ```
 
 Configuration variables:
@@ -74,8 +75,7 @@ Configuration variables:
 - **vehicle_position_url** (*Optional*): Provides live bus position tracking on the home assistant map
 - **api_key** (*Optional*): If provided, this key will be sent with API
 requests in an "Authorization" header.
-- **x_api_key** (*Optional*): If provided, this key will be sent with API
-requests in an "x-api-key" header.
+- **header_name** (*Optional*): If provided, will replace the "x-api-key" header.
 - **departures** (*Required*): A list of routes and departure locations to watch
 - **route** (*Optional*): The name of the gtfs route
 - **stopid** (*Optional*): The stopid for the location you want etas for
@@ -104,7 +104,7 @@ logger:
 ```
 2. Restart HA
 3. Verify you're still having the issue
-4. File an issue in this Github Repository containing your HA log (Developer section > Info > Load Full Home Assistant Log)
+4. File an issue in this GitHub Repository containing your HA log (Developer section > Info > Load Full Home Assistant Log)
    * You can paste your log file at pastebin https://pastebin.com/ and submit a link.
    * Please include details about your setup (Pi, NUC, etc, docker?, HASSOS?)
    * The log file can also be found at `/<config_dir>/home-assistant.log`
