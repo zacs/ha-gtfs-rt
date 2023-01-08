@@ -17,19 +17,18 @@ local transit systems that provide gtfs feeds.
 
 ## Configuration
 
-Add the following to your `configuration.yaml` file:
+Add the following to your `configuration.yaml` file, under `sensor:` (add a section if it doesn't exist):
 
 ```yaml
 # Example entry for Austin TX
 
-sensor:
-  - platform: gtfs_rt
-    trip_update_url: 'https://data.texas.gov/download/rmk2-acnw/application%2foctet-stream'
-    vehicle_position_url: 'https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream'
-    departures:
-    - name: Downtown to airport
-      route: 100
-      stopid: 514
+- platform: gtfs_rt
+  trip_update_url: 'https://data.texas.gov/download/rmk2-acnw/application%2foctet-stream'
+  vehicle_position_url: 'https://data.texas.gov/download/eiei-9rpf/application%2Foctet-stream'
+  departures:
+  - name: Downtown to airport
+    route: 100
+    stopid: 514
 ```
 
 ```yaml
