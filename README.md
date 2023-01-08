@@ -61,7 +61,7 @@ sensor:
 
 - platform: gtfs_rt
   trip_update_url: 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm'
-  apikey: <api key>
+  api_key: <api key>
   header_name: 'X-Api-Key'
   departures:
   - name: "Brooklyn F"
