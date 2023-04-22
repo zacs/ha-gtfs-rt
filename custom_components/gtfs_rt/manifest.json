@@ -6,6 +6,6 @@
     "codeowners": ["@zacs"],
     "version": "1.0.1",
     "requirements": [
-        "gtfs-realtime-bindings==0.0.5"
+        "gtfs-realtime-bindings==1.0.0"
     ]
 }
