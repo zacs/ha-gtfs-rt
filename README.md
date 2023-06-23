@@ -72,10 +72,7 @@ Configuration variables:
 
 - **trip_update_url** (*Required*): Provides bus route etas. See the **Finding Feeds** section at the bottom of the page for more details on how to find these
 - **vehicle_position_url** (*Optional*): Provides live bus position tracking on the home assistant map
-- **api_key** (*Optional*): If provided, this key will be sent with API
-requests in an "Authorization" header.
-- **x_api_key** (*Optional*): If provided, this key will be sent with API
-requests in an "x-api-key" header.
+- **headers**(*Optional*): Expects a dictionary. If provided, the dictionary will be sent as headers. (e.g. {"Authorization": "mykey"})
 - **departures** (*Required*): A list of routes and departure locations to watch
 - **route** (*Optional*): The name of the gtfs route
 - **stopid** (*Optional*): The stopid for the location you want etas for

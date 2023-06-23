@@ -6,10 +6,9 @@ from enum import Enum
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.const import (CONF_NAME, ATTR_LONGITUDE, ATTR_LATITUDE)
+from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
+from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_NAME, UnitOfTime
 import homeassistant.util.dt as dt_util
-from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
 import homeassistant.helpers.config_validation as cv
 
@@ -27,6 +26,7 @@ ATTR_NEXT_OCCUPANCY = "Next bus occupancy"
 CONF_API_KEY = 'api_key'
 CONF_APIKEY = 'apikey'
 CONF_X_API_KEY = 'x_api_key'
+CONF_HEADERS = "headers"
 CONF_STOP_ID = 'stopid'
 CONF_ROUTE = 'route'
 CONF_DEPARTURES = 'departures'
@@ -42,9 +42,10 @@ TIME_STR_FORMAT = "%H:%M"
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_TRIP_UPDATE_URL): cv.string,
-    vol.Optional(CONF_API_KEY): cv.string,
-    vol.Optional(CONF_X_API_KEY): cv.string,
-    vol.Optional(CONF_APIKEY): cv.string,
+    vol.Exclusive(CONF_API_KEY, "headers"): cv.string,
+    vol.Exclusive(CONF_X_API_KEY, "headers"): cv.string,
+    vol.Exclusive(CONF_APIKEY, "headers"): cv.string,
+    vol.Exclusive(CONF_HEADERS, "headers"): {cv.string: cv.string},
     vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
     vol.Optional(CONF_DEPARTURES): [{
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
@@ -72,7 +73,14 @@ def due_in_minutes(timestamp):
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Get the Dublin public transport sensor."""
-    data = PublicTransportData(config.get(CONF_TRIP_UPDATE_URL), config.get(CONF_VEHICLE_POSITION_URL), config.get(CONF_API_KEY), config.get(CONF_X_API_KEY), config.get(CONF_APIKEY))
+    headers = config.get(CONF_HEADERS, {})
+    if (api_key := config.get(CONF_API_KEY)) is not None:
+        headers['Authorization'] = api_key
+    elif (apikey := config.get(CONF_APIKEY)) is not None:
+        headers['apikey'] = apikey
+    elif (x_api_key := config.get(CONF_X_API_KEY)) is not None:
+        headers['x-api-key'] = x_api_key
+    data = PublicTransportData(config.get(CONF_TRIP_UPDATE_URL), config.get(CONF_VEHICLE_POSITION_URL), headers)
     sensors = []
     for departure in config.get(CONF_DEPARTURES):
         sensors.append(PublicTransportSensor(
@@ -82,23 +90,21 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
             departure.get(CONF_NAME)
         ))
 
-    add_devices(sensors)
+    add_devices(sensors, True)
 
 
-class PublicTransportSensor(Entity):
+class PublicTransportSensor(SensorEntity):
     """Implementation of a public transport sensor."""
 
     def __init__(self, data, stop, route, name):
         """Initialize the sensor."""
         self.data = data
-        self._name = name
         self._stop = stop
         self._route = route
-        self.update()
 
-    @property
-    def name(self):
-        return self._name
+        self._attr_name = name
+        self._attr_icon = ICON
+        self._attr_native_unit_of_measurement = UnitOfTime.MINUTES
 
     def _get_next_buses(self):
         return self.data.info.get(self._route, {}).get(self._stop, [])
@@ -130,16 +136,6 @@ class PublicTransportSensor(Entity):
             attrs[ATTR_NEXT_OCCUPANCY] = next_buses[1].occupancy
         return attrs
 
-    @property
-    def unit_of_measurement(self):
-        """Return the unit this state is expressed in."""
-        return "min"
-
-    @property
-    def icon(self):
-        """Icon to use in the frontend, if any."""
-        return ICON
-
     def update(self):
         """Get the latest data from opendata.ch and update the states."""
         self.data.update()
@@ -148,18 +144,11 @@ class PublicTransportSensor(Entity):
 class PublicTransportData(object):
     """The Class for handling the data retrieval."""
 
-    def __init__(self, trip_update_url, vehicle_position_url=None, api_key=None, x_api_key=None, apikey=None):
+    def __init__(self, trip_update_url, vehicle_position_url=None, headers=None):
         """Initialize the info object."""
         self._trip_update_url = trip_update_url
         self._vehicle_position_url = vehicle_position_url
-        if api_key is not None:
-            self._headers = {'Authorization': api_key}
-        elif apikey is not None:
-            self._headers = {'apikey': apikey}    
-        elif x_api_key is not None:
-            self._headers = {'x-api-key': x_api_key}
-        else:
-            self._headers = None
+        self._headers = headers
         self.info = {}
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
