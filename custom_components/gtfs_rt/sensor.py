@@ -32,6 +32,7 @@ CONF_ROUTE = 'route'
 CONF_DEPARTURES = 'departures'
 CONF_TRIP_UPDATE_URL = 'trip_update_url'
 CONF_VEHICLE_POSITION_URL = 'vehicle_position_url'
+CONF_MAX_DEPARTURES = 'max_departures'
 
 DEFAULT_NAME = 'Next Bus'
 ICON = 'mdi:bus'
@@ -49,6 +50,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
     vol.Optional(CONF_DEPARTURES): [{
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+        vol.Optional(CONF_MAX_DEPARTURES, default=3): cv.positive_int,
         vol.Required(CONF_STOP_ID): cv.string,
         vol.Required(CONF_ROUTE): cv.string
     }]
@@ -85,6 +87,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     for departure in config.get(CONF_DEPARTURES):
         sensors.append(PublicTransportSensor(
             data,
+            departure.get(CONF_MAX_DEPARTURES),
             departure.get(CONF_STOP_ID),
             departure.get(CONF_ROUTE),
             departure.get(CONF_NAME)
@@ -96,11 +99,12 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 class PublicTransportSensor(SensorEntity):
     """Implementation of a public transport sensor."""
 
-    def __init__(self, data, stop, route, name):
+    def __init__(self, data, max_departures, stop, route, name):
         """Initialize the sensor."""
         self.data = data
         self._stop = stop
         self._route = route
+        self._max_departures = max_departures
 
         self._attr_name = name
         self._attr_icon = ICON
@@ -134,8 +138,9 @@ class PublicTransportSensor(SensorEntity):
             attrs[ATTR_NEXT_UP] = next_buses[1].arrival_time.strftime(TIME_STR_FORMAT) if len(next_buses) > 1 else '-'
             attrs[ATTR_NEXT_UP_DUE_IN] = due_in_minutes(next_buses[1].arrival_time) if len(next_buses) > 1 else '-'
             attrs[ATTR_NEXT_OCCUPANCY] = next_buses[1].occupancy
-        if len(next_buses) > 2:
-            for i, bus in enumerate(next_buses[2:], start=2):
+        if len(next_buses) > 2 and (self._max_departures > 2 or self._max_departures == 0):
+            end_index = min(len(next_buses), self._max_departures + 2) if self._max_departures > 0 else len(next_buses)
+            for i, bus in enumerate(next_buses[2:end_index], start=2):
                 attrs[f"{ATTR_NEXT_UP} (+{i - 1})"] = bus.arrival_time.strftime(TIME_STR_FORMAT)
                 attrs[f"{ATTR_NEXT_UP_DUE_IN} (+{i - 1})"] = due_in_minutes(bus.arrival_time)
                 attrs[f"{ATTR_NEXT_OCCUPANCY} (+{i - 1})"] = bus.occupancy

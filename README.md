@@ -76,6 +76,7 @@ Configuration variables:
 - **departures** (*Required*): A list of routes and departure locations to watch
 - **route** (*Optional*): The name of the gtfs route
 - **stopid** (*Optional*): The stopid for the location you want etas for
+- **max_departures** (*Optional*): The maximum number of departures to retrieve. Defaults to 2. Specify 0 for all departures.
 
 ## Screenshot
 
