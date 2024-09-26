@@ -37,6 +37,7 @@ sensor:
 
 - platform: gtfs_rt
   trip_update_url: 'http://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/1.pb?key=TEST'
+  vehicle_position_url: 'http://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/1.pb?key=TEST'
   departures:
   - name: "48 to Uni"
     route: 100228
