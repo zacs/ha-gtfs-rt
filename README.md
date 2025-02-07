@@ -69,6 +69,18 @@ sensor:
         stopid: 'F16S'
 ```
 
+```yaml
+# Example entry for Boston
+
+- platform: gtfs_rt
+    trip_update_url: 'https://cdn.mbta.com/realtime/TripUpdates.pb'
+    vehicle_position_url: 'https://cdn.mbta.com/realtime/VehiclePositions.pb'
+    departures:
+      - name: "MBTA Red Line Kendall/MIT to Ashmont/Braintree"
+        route: 'Red'
+        stopid: '70071'
+```
+
 Configuration variables:
 
 - **trip_update_url** (*Required*): Provides bus route etas. See the **Finding Feeds** section at the bottom of the page for more details on how to find these
