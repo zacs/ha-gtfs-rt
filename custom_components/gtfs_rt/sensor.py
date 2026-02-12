@@ -67,7 +67,7 @@ class OccupancyStatus(Enum):
 
 def due_in_minutes(timestamp):
     """Get the remaining minutes from now until a given datetime object."""
-    diff = timestamp - dt_util.now().replace(tzinfo=None)
+    diff = timestamp - datetime.datetime.now()
     return int(diff.total_seconds() / 60)
 
 
