@@ -1,0 +1,90 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This feed is already configured.",
+      "reconfigure_successful": "The feed was reconfigured successfully."
+    },
+    "error": {
+      "cannot_connect": "Could not download the feed: {details}",
+      "invalid_auth": "The server rejected the request. Check the API key and headers.",
+      "invalid_feed": "The URL did not return a GTFS-realtime feed: {details}",
+      "invalid_headers": "Headers must be a list of `name: value` pairs.",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "reconfigure": {
+        "data": {
+          "headers": "HTTP headers",
+          "name": "Name",
+          "trip_update_url": "Trip updates URL",
+          "vehicle_position_url": "Vehicle positions URL"
+        },
+        "data_description": {
+          "headers": "Optional headers sent with every request, for agencies that require an API key header. For example `x-api-key: YOUR_KEY`.",
+          "name": "Optional. Defaults to the feed's host name.",
+          "trip_update_url": "The agency's GTFS-realtime TripUpdates feed. An API key passed as a query parameter can be included in the URL.",
+          "vehicle_position_url": "Optional GTFS-realtime VehiclePositions feed, used for vehicle location and occupancy."
+        },
+        "description": "Update the feed URLs or headers, for example to change an API key.",
+        "title": "Reconfigure feed"
+      },
+      "user": {
+        "data": {
+          "headers": "HTTP headers",
+          "name": "Name",
+          "trip_update_url": "Trip updates URL",
+          "vehicle_position_url": "Vehicle positions URL"
+        },
+        "data_description": {
+          "headers": "Optional headers sent with every request, for agencies that require an API key header. For example `x-api-key: YOUR_KEY`.",
+          "name": "Optional. Defaults to the feed's host name.",
+          "trip_update_url": "The agency's GTFS-realtime TripUpdates feed. An API key passed as a query parameter can be included in the URL.",
+          "vehicle_position_url": "Optional GTFS-realtime VehiclePositions feed, used for vehicle location and occupancy."
+        },
+        "description": "Add your transit agency's GTFS-realtime feed. Once it is added, add a departure for each stop you want to track.",
+        "title": "Add GTFS-realtime feed"
+      }
+    }
+  },
+  "config_subentries": {
+    "departure": {
+      "abort": {
+        "already_configured": "This departure is already configured for this feed.",
+        "reconfigure_successful": "The departure was reconfigured successfully."
+      },
+      "entry_type": "Departure",
+      "initiate_flow": {
+        "user": "Add departure"
+      },
+      "step": {
+        "reconfigure": {
+          "data": {
+            "name": "Name",
+            "route": "Route ID",
+            "stopid": "Stop ID"
+          },
+          "data_description": {
+            "name": "Optional. Used as the sensor name.",
+            "route": "Optional. Leave empty to track the next departure of any route from this stop.",
+            "stopid": "The stop_id from the agency's GTFS schedule (stops.txt)."
+          },
+          "title": "Reconfigure departure"
+        },
+        "user": {
+          "data": {
+            "name": "Name",
+            "route": "Route ID",
+            "stopid": "Stop ID"
+          },
+          "data_description": {
+            "name": "Optional. Used as the sensor name.",
+            "route": "Optional. Leave empty to track the next departure of any route from this stop.",
+            "stopid": "The stop_id from the agency's GTFS schedule (stops.txt)."
+          },
+          "description": "Track upcoming departures from a stop. Use the route_id and stop_id values from the agency's GTFS schedule; these are often different from the numbers shown on signs.",
+          "title": "Add departure"
+        }
+      }
+    }
+  }
+}

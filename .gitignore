@@ -108,3 +108,5 @@ venv.bak/
 
 # Mac
 .DS_Store
+# Tooling caches
+.ruff_cache/
