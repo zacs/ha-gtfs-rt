@@ -80,7 +80,9 @@ Key decisions:
   the combination current HA supports. Recent HA raises if
   `async_update_reload_and_abort` is mixed with an update listener on
   subentries.
-* **Polling.** 60 s, the same floor as the old `Throttle`. UI entries use a
+* **Polling.** 60 s, the same floor as the old `Throttle`. Between polls, each
+  sensor recalculates "Due in" every 30 s from the last data, as 1.x did
+  when HA polled the entity on the sensor default of 30 s. UI entries use a
   fixed interval (quality scale `appropriate-polling`). Users who need
   something else can disable polling and call `homeassistant.update_entity`.
   YAML honors `scan_interval` when it's **longer** than 60 s, which preserves
@@ -93,10 +95,11 @@ Key decisions:
 | All times are UTC-aware (`fromtimestamp(ts, UTC)` vs `dt_util.utcnow()`). "Due at" is rendered in HA's timezone. | GTFS-RT times are POSIX timestamps. Fixes #23 for every agency. |
 | Use `arrival.time`, fall back to `departure.time`. | Both are spec-optional. Arrival stays first so existing sensors don't shift. |
 | Skip trips whose `schedule_relationship` is `CANCELED`/`DELETED`, stops that are `SKIPPED`/`NO_DATA`, and entities with `is_deleted`. | Spec semantics. Looked up by enum *name* so it works on any bindings version. |
-| If a TripUpdate has no `route_id`, use the route from the matching VehiclePosition (same `trip_id`). | `route_id` is optional when `trip_id` is present. Some feeds only put it in vehicle positions. |
+| If a TripUpdate has no `route_id`, use the route from the VehiclePosition for the *same trip*. A position matched only by vehicle ID could be for the vehicle's previous trip. | `route_id` is optional when `trip_id` is present. Some feeds only put it in vehicle positions. |
 | `route` is optional per departure. Omitting it gives "next departure from this stop, any route". | Requested in #3. Works for any feed. |
 | Occupancy and position are only reported when the feed sets them (`HasField`). Names come from the generated enum. | Removes fake `EMPTY` / 0°,0° values. Picks up new spec values for free. |
-| Join TripUpdate → VehiclePosition by vehicle ID, then by `trip_id`. | Same as 1.0.1, but the trip join no longer requires a vehicle ID on the trip update. |
+| Join TripUpdate → VehiclePosition by vehicle ID, then by trip (`trip_id` + `start_date` + `start_time`). A `trip_id` run by several vehicles at once is never guessed. | The spec identifies frequency-based trip instances by start time. 1.0.1 gave every such trip the last vehicle's position. |
+| Timestamps that can't be represented (for example milliseconds) are skipped, not fatal. | One bad value no longer fails the update for every sensor on the feed. |
 | `Accept: application/x-protobuf, application/octet-stream;q=0.9, */*;q=0.8` unless the user sets `Accept`. | Standard content negotiation. Some APIs return JSON or HTML unless asked for protobuf. |
 | If the body is JSON (`{`), parse it with protobuf's own `json_format` (camelCase or snake_case). | A one-byte format check, no per-provider mapping. Covers feeds that only serve JSON (#29). |
 | A body that won't parse, or parses to nothing, raises a clear error. The error recognizes static GTFS zips, HTML pages, and text-format protobuf (`?debug`). | Turns the most common setup mistakes (#7, #24, #37) into actionable messages. |

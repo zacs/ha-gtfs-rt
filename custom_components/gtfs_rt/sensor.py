@@ -28,6 +28,7 @@ from homeassistant.helpers.entity_platform import (
     AddConfigEntryEntitiesCallback,
     AddEntitiesCallback,
 )
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -50,6 +51,7 @@ from .const import (
     CONF_TRIP_UPDATE_URL,
     CONF_VEHICLE_POSITION_URL,
     CONF_X_API_KEY,
+    COUNTDOWN_INTERVAL,
     DEFAULT_ICON,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
@@ -189,6 +191,23 @@ class GtfsRtDepartureSensor(CoordinatorEntity[GtfsRtCoordinator], SensorEntity):
             self._attr_name = None
             self._attr_device_info = device_info
         self._update_from_data()
+
+    async def async_added_to_hass(self) -> None:
+        """Keep the countdown moving between feed polls."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_interval(
+                self.hass,
+                self._async_count_down,
+                COUNTDOWN_INTERVAL,
+                cancel_on_shutdown=True,
+            )
+        )
+
+    @callback
+    def _async_count_down(self, _now: datetime) -> None:
+        self._update_from_data()
+        self.async_write_ha_state()
 
     @callback
     def _handle_coordinator_update(self) -> None:

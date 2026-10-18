@@ -405,3 +405,23 @@ async def test_departures_attribute_is_capped(
     state = hass.states.get(ENTITY_ID)
     assert state is not None
     assert len(state.attributes["departures"]) == 10
+
+
+async def test_countdown_updates_between_polls(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    frozen_time: FrozenDateTimeFactory,
+) -> None:
+    """As in 1.x, "Due in" is recalculated every 30 s while fetching once a minute."""
+    trips, _ = standard_feeds()
+    aioclient_mock.get(TRIP_URL, content=trips)
+    config = {k: v for k, v in YAML_CONFIG.items() if k != "vehicle_position_url"}
+    await setup_yaml(hass, config)
+
+    await advance_time(hass, frozen_time, 30)
+
+    state = hass.states.get(ENTITY_ID)
+    assert state is not None
+    assert state.state == "4"
+    assert state.attributes["Due in"] == 4
+    assert aioclient_mock.call_count == 1

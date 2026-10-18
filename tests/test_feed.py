@@ -7,10 +7,12 @@ from datetime import UTC, datetime, timedelta
 import aiohttp
 from google.protobuf import json_format
 from google.transit import gtfs_realtime_pb2
+from multidict import CIMultiDict, CIMultiDictProxy
 import pytest
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
+from yarl import URL
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -30,6 +32,9 @@ from .common import NOW, TRIP_URL, add_trip, add_vehicle, at, make_feed
 
 TripDescriptor = gtfs_realtime_pb2.TripDescriptor
 StopTimeUpdate = gtfs_realtime_pb2.TripUpdate.StopTimeUpdate
+REQUEST_INFO = aiohttp.RequestInfo(
+    URL(TRIP_URL), "GET", CIMultiDictProxy(CIMultiDict()), URL(TRIP_URL)
+)
 
 
 def minutes(departure_time: datetime) -> float:
@@ -188,6 +193,60 @@ def test_route_id_falls_back_to_vehicle_position() -> None:
     assert departure.vehicle_id is None
 
 
+def test_out_of_range_times_are_skipped() -> None:
+    """A timestamp in milliseconds is dropped instead of failing the whole feed."""
+    feed = make_feed()
+    add_trip(feed, "bad", "100").stop_time_update.add(stop_id="A").arrival.time = (
+        at(5) * 1000
+    )
+    add_trip(feed, "good", "100", stops={"A": 6})
+
+    assert [d.trip_id for d in build_departures(feed, None, NOW)["A"]] == ["good"]
+
+
+def test_route_id_not_taken_from_vehicle_on_another_trip() -> None:
+    """A vehicle still finishing its previous trip doesn't lend that trip's route."""
+    trips = make_feed()
+    add_trip(trips, "next", stops={"A": 20}, vehicle_id="bus")
+    vehicles = make_feed()
+    add_vehicle(vehicles, "bus", trip_id="current", route_id="R1", position=(1.5, 2.5))
+
+    departure = build_departures(trips, vehicles, NOW)["A"][0]
+
+    assert departure.route_id == ""
+    assert departure.vehicle_id == "bus"
+    assert departure.latitude == 1.5
+
+
+def test_frequency_based_trips_are_told_apart_by_start_time() -> None:
+    """Vehicles sharing a trip_id are matched by start time, never guessed."""
+    trips = make_feed()
+    add_trip(trips, "f", "100", stops={"A": 5}).trip.start_time = "08:10:00"
+    add_trip(trips, "f", "100", stops={"B": 5})
+    vehicles = make_feed()
+    for vehicle_id, start_time in (("early", "08:00:00"), ("late", "08:10:00")):
+        add_vehicle(vehicles, vehicle_id, trip_id="f").trip.start_time = start_time
+
+    departures = build_departures(trips, vehicles, NOW)
+
+    assert departures["A"][0].vehicle_id == "late"
+    assert departures["B"][0].vehicle_id is None
+
+
+def test_trip_updates_without_trip_id() -> None:
+    """A trip identified only by its route still yields departures."""
+    trips = make_feed()
+    trips.entity.add(id="r").trip_update.trip.route_id = "100"
+    trips.entity[0].trip_update.stop_time_update.add(stop_id="A").arrival.time = at(5)
+    vehicles = make_feed()
+    add_vehicle(vehicles, "bus", route_id="100", position=(1.5, 2.5))
+
+    departure = build_departures(trips, vehicles, NOW)["A"][0]
+
+    assert departure.route_id == "100"
+    assert departure.vehicle_id is None
+
+
 def test_unreported_occupancy_and_position_are_none() -> None:
     """Missing fields are None, not the protobuf defaults (EMPTY, 0°/0°)."""
     trips = make_feed()
@@ -309,7 +368,23 @@ async def test_fetch_keeps_user_accept_header(
         ({"status": 404}, FeedFetchError, "HTTP 404"),
         ({"status": 503}, FeedFetchError, "HTTP 503"),
         ({"exc": TimeoutError()}, FeedFetchError, "timed out"),
-        ({"exc": aiohttp.ClientError("boom")}, FeedFetchError, "boom"),
+        ({"exc": aiohttp.ClientConnectionError("boom")}, FeedFetchError, "boom"),
+        # These embed the full URL, including any key, in their message.
+        (
+            {"exc": aiohttp.TooManyRedirects(REQUEST_INFO, ())},
+            FeedFetchError,
+            "TooManyRedirects",
+        ),
+        (
+            {"exc": aiohttp.InvalidUrlClientError(URL(TRIP_URL))},
+            FeedFetchError,
+            "InvalidUrlClientError",
+        ),
+        (
+            {"exc": aiohttp.NonHttpUrlClientError(URL(TRIP_URL))},
+            FeedFetchError,
+            "NonHttpUrlClientError",
+        ),
     ],
 )
 async def test_fetch_errors(

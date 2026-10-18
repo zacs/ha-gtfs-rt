@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 import logging
 
 from google.transit import gtfs_realtime_pb2
@@ -29,6 +29,7 @@ from .feed import (
     async_fetch,
     build_departures,
     parse_feed,
+    to_datetime,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ class GtfsRtCoordinator(DataUpdateCoordinator[GtfsRtData]):
         )
         feed_timestamp = None
         if trip_feed.header.HasField("timestamp"):
-            feed_timestamp = datetime.fromtimestamp(trip_feed.header.timestamp, UTC)
+            feed_timestamp = to_datetime(trip_feed.header.timestamp)
         return GtfsRtData(departures=departures, feed_timestamp=feed_timestamp)
 
     async def _async_load(self, url: str) -> gtfs_realtime_pb2.FeedMessage:

@@ -11,6 +11,7 @@ from yarl import URL
 
 from homeassistant.config_entries import (
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
@@ -125,12 +126,20 @@ class GtfsRtConfigFlow(ConfigFlow, domain=DOMAIN):
                 self.hass.config_entries.async_update_entry(
                     entry, title=_feed_title(user_input), data=data
                 )
+                # The listener only exists while loaded; this is how a rejected
+                # API key gets fixed.
+                if entry.state is ConfigEntryState.SETUP_RETRY:
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
 
+        suggested = dict(entry.data)
+        # Leave the default name blank so it follows a new URL.
+        if entry.title != _default_feed_title(entry.data[CONF_TRIP_UPDATE_URL]):
+            suggested[CONF_NAME] = entry.title
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
-                FEED_SCHEMA, user_input or {**entry.data, CONF_NAME: entry.title}
+                FEED_SCHEMA, user_input or suggested
             ),
             errors=errors,
             description_placeholders=placeholders,
@@ -170,10 +179,16 @@ class DepartureSubentryFlow(ConfigSubentryFlow):
                 unique_id=unique_id,
             )
 
+        suggested = dict(subentry.data)
+        # Leave the default name blank so it follows a new stop or route.
+        if subentry.title != _default_departure_title(
+            subentry.data[CONF_STOP_ID], subentry.data.get(CONF_ROUTE, "")
+        ):
+            suggested[CONF_NAME] = subentry.title
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
-                DEPARTURE_SCHEMA, {**subentry.data, CONF_NAME: subentry.title}
+                DEPARTURE_SCHEMA, suggested
             ),
         )
 
@@ -225,9 +240,12 @@ async def _async_validate_feed(
 
 
 def _feed_title(user_input: Mapping[str, Any]) -> str:
-    if name := (user_input.get(CONF_NAME) or "").strip():
-        return name
-    return URL(user_input[CONF_TRIP_UPDATE_URL].strip()).host or "GTFS-Realtime"
+    name = (user_input.get(CONF_NAME) or "").strip()
+    return name or _default_feed_title(user_input[CONF_TRIP_UPDATE_URL].strip())
+
+
+def _default_feed_title(url: str) -> str:
+    return URL(url).host or "GTFS-Realtime"
 
 
 def _departure(user_input: Mapping[str, Any]) -> tuple[str, dict[str, str], str]:
@@ -237,6 +255,10 @@ def _departure(user_input: Mapping[str, Any]) -> tuple[str, dict[str, str], str]
     data = {CONF_STOP_ID: stop_id}
     if route:
         data[CONF_ROUTE] = route
-    default_title = f"{route} at {stop_id}" if route else f"Stop {stop_id}"
-    title = (user_input.get(CONF_NAME) or "").strip() or default_title
+    name = (user_input.get(CONF_NAME) or "").strip()
+    title = name or _default_departure_title(stop_id, route)
     return title, data, f"{route}|{stop_id}"
+
+
+def _default_departure_title(stop_id: str, route: str) -> str:
+    return f"{route} at {stop_id}" if route else f"Stop {stop_id}"

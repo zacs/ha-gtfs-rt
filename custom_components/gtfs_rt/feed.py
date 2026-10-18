@@ -88,8 +88,14 @@ async def async_fetch(
             return await response.read()
     except TimeoutError as err:
         raise FeedFetchError("request timed out") from err
-    except aiohttp.ClientError as err:
+    except aiohttp.ClientConnectionError as err:
+        # Connection errors only name the host; other client errors (redirects,
+        # invalid URLs, HTTP errors) embed the full URL in their message.
         raise FeedFetchError(f"{type(err).__name__}: {err}") from err
+    except aiohttp.ClientResponseError as err:
+        raise FeedFetchError(f"{type(err).__name__} (HTTP {err.status})") from err
+    except aiohttp.ClientError as err:
+        raise FeedFetchError(type(err).__name__) from err
 
 
 def parse_feed(content: bytes) -> gtfs_realtime_pb2.FeedMessage:
@@ -118,7 +124,7 @@ def build_departures(
     now: datetime,
 ) -> dict[str, list[Departure]]:
     """Index upcoming departures by stop ID, soonest first."""
-    by_vehicle, by_trip = _index_vehicles(vehicle_feed)
+    vehicles = _VehicleIndex(vehicle_feed)
     now_ts = now.timestamp()
     departures: defaultdict[str, list[Departure]] = defaultdict(list)
 
@@ -130,9 +136,12 @@ def build_departures(
         if _name(_TripRelationship, trip.schedule_relationship) in _SKIPPED_TRIPS:
             continue
 
-        vehicle = by_vehicle.get(trip_update.vehicle.id) or by_trip.get(trip.trip_id)
-        # route_id is optional when trip_id is set; vehicle positions may carry it.
-        route_id = trip.route_id or (vehicle.route_id if vehicle else "")
+        trip_vehicle = vehicles.for_trip(trip)
+        vehicle = vehicles.for_vehicle_id(trip_update.vehicle.id) or trip_vehicle
+        # route_id is optional when trip_id is set. Only a position reported for
+        # this same trip says which route it is; the vehicle may still be
+        # finishing a different trip.
+        route_id = trip.route_id or (trip_vehicle.route_id if trip_vehicle else "")
         vehicle_id = trip_update.vehicle.id or (vehicle.vehicle_id if vehicle else None)
 
         for update in trip_update.stop_time_update:
@@ -143,13 +152,13 @@ def build_departures(
             ):
                 continue
             timestamp = _next_event_time(update, now_ts)
-            if timestamp is None:
+            if timestamp is None or (when := to_datetime(timestamp)) is None:
                 continue
             departures[update.stop_id].append(
                 Departure(
                     route_id=route_id,
                     trip_id=trip.trip_id,
-                    time=datetime.fromtimestamp(timestamp, UTC),
+                    time=when,
                     vehicle_id=vehicle_id,
                     latitude=vehicle.latitude if vehicle else None,
                     longitude=vehicle.longitude if vehicle else None,
@@ -176,19 +185,21 @@ def _next_event_time(
     return None
 
 
-def _index_vehicles(
-    feed: gtfs_realtime_pb2.FeedMessage | None,
-) -> tuple[dict[str, _Vehicle], dict[str, _Vehicle]]:
-    """Index vehicle positions by vehicle ID and by trip ID."""
-    by_vehicle: dict[str, _Vehicle] = {}
-    by_trip: dict[str, _Vehicle] = {}
-    if feed is None:
-        return by_vehicle, by_trip
+class _VehicleIndex:
+    """Vehicle positions, looked up by vehicle ID or by trip."""
 
-    for entity in feed.entity:
-        if entity.is_deleted or not entity.HasField("vehicle"):
-            continue
-        position = entity.vehicle
+    def __init__(self, feed: gtfs_realtime_pb2.FeedMessage | None) -> None:
+        self._by_vehicle_id: dict[str, _Vehicle] = {}
+        self._by_trip: dict[tuple[str, str, str], _Vehicle] = {}
+        # None marks a trip_id that several vehicles run at once, which the
+        # spec allows for frequency-based trips (told apart by start time).
+        self._by_trip_id: dict[str, _Vehicle | None] = {}
+        for entity in feed.entity if feed else ():
+            if entity.is_deleted or not entity.HasField("vehicle"):
+                continue
+            self._add(entity.vehicle)
+
+    def _add(self, position: gtfs_realtime_pb2.VehiclePosition) -> None:
         has_fix = position.HasField("position")
         occupancy = None
         if position.HasField("occupancy_status"):
@@ -201,10 +212,31 @@ def _index_vehicles(
             occupancy=occupancy,
         )
         if vehicle.vehicle_id:
-            by_vehicle[vehicle.vehicle_id] = vehicle
-        if position.trip.trip_id:
-            by_trip[position.trip.trip_id] = vehicle
-    return by_vehicle, by_trip
+            self._by_vehicle_id[vehicle.vehicle_id] = vehicle
+        if trip_id := position.trip.trip_id:
+            self._by_trip[_trip_key(position.trip)] = vehicle
+            existing = self._by_trip_id.get(trip_id, vehicle)
+            self._by_trip_id[trip_id] = vehicle if existing == vehicle else None
+
+    def for_vehicle_id(self, vehicle_id: str) -> _Vehicle | None:
+        return self._by_vehicle_id.get(vehicle_id) if vehicle_id else None
+
+    def for_trip(self, trip: gtfs_realtime_pb2.TripDescriptor) -> _Vehicle | None:
+        if not trip.trip_id:
+            return None
+        return self._by_trip.get(_trip_key(trip)) or self._by_trip_id.get(trip.trip_id)
+
+
+def _trip_key(trip: gtfs_realtime_pb2.TripDescriptor) -> tuple[str, str, str]:
+    return (trip.trip_id, trip.start_date, trip.start_time)
+
+
+def to_datetime(timestamp: int) -> datetime | None:
+    """Convert a POSIX timestamp; None if out of range (e.g. in milliseconds)."""
+    try:
+        return datetime.fromtimestamp(timestamp, UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _name(enum: Any, value: int) -> str:

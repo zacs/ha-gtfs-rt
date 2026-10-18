@@ -20,6 +20,8 @@ DEFAULT_NAME = "Next Bus"
 DEFAULT_ICON = "mdi:bus"
 # Also the minimum: 1.x throttled every feed to one request per minute.
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
+# How often "Due in" is recalculated from the last poll, as 1.x did.
+COUNTDOWN_INTERVAL = timedelta(seconds=30)
 TIME_STR_FORMAT = "%H:%M"
 MAX_LISTED_DEPARTURES = 10
 

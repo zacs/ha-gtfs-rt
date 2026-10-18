@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
@@ -16,7 +17,7 @@ from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 
-from .common import TRIP_URL, VEHICLE_URL, add_trip, make_feed, standard_feeds
+from .common import TRIP_URL, VEHICLE_URL, add_trip, at, make_feed, standard_feeds
 
 
 async def test_diagnostics(
@@ -86,15 +87,19 @@ async def test_diagnostics_vehicle_feed_error(
     assert diagnostics["feed"]["vehicle_feed_error"] == "HTTP 500"
 
 
-async def test_diagnostics_without_feed_timestamp(
+@pytest.mark.parametrize("timestamp", [None, at(0) * 1000])
+async def test_diagnostics_without_usable_feed_timestamp(
     hass: HomeAssistant,
     hass_client: ClientSessionGenerator,
     aioclient_mock: AiohttpClientMocker,
     config_entry: MockConfigEntry,
+    timestamp: int | None,
 ) -> None:
-    """The feed header timestamp is optional."""
+    """A missing or out-of-range (milliseconds) header timestamp is ignored."""
     feed = make_feed()
     feed.header.ClearField("timestamp")
+    if timestamp is not None:
+        feed.header.timestamp = timestamp
     add_trip(feed, "t", "100", stops={"514": 5})
     aioclient_mock.get(TRIP_URL, content=feed.SerializeToString())
     aioclient_mock.get(VEHICLE_URL, content=make_feed().SerializeToString())
@@ -108,3 +113,4 @@ async def test_diagnostics_without_feed_timestamp(
     )
 
     assert diagnostics["feed"]["feed_timestamp"] is None
+    assert diagnostics["feed"]["last_update_success"] is True

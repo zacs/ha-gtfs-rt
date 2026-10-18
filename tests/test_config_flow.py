@@ -11,7 +11,11 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
 
-from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
+from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
+    SOURCE_USER,
+    ConfigEntryState,
+)
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -35,6 +39,15 @@ USER_INPUT = {
     CONF_VEHICLE_POSITION_URL: VEHICLE_URL,
     CONF_HEADERS: {"x-api-key": "SECRET"},
 }
+
+
+def suggested_values(result: dict[str, Any]) -> dict[str, Any]:
+    """Return the values a form is pre-filled with."""
+    return {
+        str(key): key.description["suggested_value"]
+        for key in result["data_schema"].schema
+        if key.description and "suggested_value" in key.description
+    }
 
 
 async def start_user_flow(hass: HomeAssistant) -> dict[str, Any]:
@@ -198,6 +211,7 @@ async def test_reconfigure(
     result = await config_entry.start_reconfigure_flow(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "reconfigure"
+    assert suggested_values(result)[CONF_NAME] == "Example Transit"
 
     mock_feeds.clear_requests()
     trips, _ = standard_feeds()
@@ -218,6 +232,58 @@ async def test_reconfigure(
     # Validation, then the reload's first refresh, both with the new key.
     assert [call[3]["x-api-key"] for call in mock_feeds.mock_calls] == ["NEW", "NEW"]
     assert len(config_entry.subentries) == 2
+
+
+async def test_reconfigure_default_name_follows_url(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+) -> None:
+    """A name that was derived from the URL isn't pinned when the URL changes."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="transit.example.com",
+        data={CONF_TRIP_UPDATE_URL: TRIP_URL, CONF_HEADERS: {}},
+    )
+    entry.add_to_hass(hass)
+    trips, _ = standard_feeds()
+    aioclient_mock.get("https://new.example.org/tu.pb", content=trips)
+
+    result = await entry.start_reconfigure_flow(hass)
+    assert CONF_NAME not in suggested_values(result)
+    with patch("custom_components.gtfs_rt.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_TRIP_UPDATE_URL: "https://new.example.org/tu.pb"}
+        )
+
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.title == "new.example.org"
+
+
+async def test_reconfigure_recovers_entry_waiting_to_retry(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Fixing a rejected API key loads the entry right away."""
+    aioclient_mock.get(TRIP_URL, status=401)
+    aioclient_mock.get(VEHICLE_URL, status=401)
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+
+    trips, _ = standard_feeds()
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(TRIP_URL, content=trips)
+    result = await config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_TRIP_UPDATE_URL: TRIP_URL, CONF_HEADERS: {"x-api-key": "FIXED"}},
+    )
+    await hass.async_block_till_done()
+
+    assert result["reason"] == "reconfigure_successful"
+    assert config_entry.state is ConfigEntryState.LOADED
 
 
 async def test_reconfigure_errors(
@@ -346,6 +412,11 @@ async def test_reconfigure_departure(
     )
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "reconfigure"
+    assert suggested_values(result) == {
+        CONF_NAME: "Downtown to airport",
+        CONF_STOP_ID: "514",
+        CONF_ROUTE: "100",
+    }
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
         {CONF_NAME: "Route 200", CONF_STOP_ID: "514", CONF_ROUTE: "200"},
@@ -382,3 +453,29 @@ async def test_reconfigure_departure_duplicate(
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_reconfigure_departure_default_name_follows_values(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """A generated name is regenerated rather than pinned on reconfigure."""
+    config_entry.add_to_hass(hass)
+    result = await start_departure_flow(hass, config_entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_STOP_ID: "601", CONF_ROUTE: "100"}
+    )
+    subentry_id = next(
+        s.subentry_id
+        for s in config_entry.subentries.values()
+        if s.unique_id == "100|601"
+    )
+
+    result = await start_departure_flow(
+        hass, config_entry, SOURCE_RECONFIGURE, subentry_id=subentry_id
+    )
+    assert CONF_NAME not in suggested_values(result)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_STOP_ID: "601", CONF_ROUTE: "200"}
+    )
+
+    assert config_entry.subentries[subentry_id].title == "200 at 601"

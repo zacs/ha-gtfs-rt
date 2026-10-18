@@ -36,6 +36,10 @@ same entity IDs and attribute names.
 * A failing vehicle positions feed no longer breaks departures.
 * Feed requests have a timeout and no longer block Home Assistant (#10).
 * The route ID is taken from vehicle positions when trip updates leave it out.
+* Vehicles running frequency-based trips (several vehicles sharing one trip ID)
+  are no longer mixed up; they're matched by start time.
+* One out-of-range timestamp in a feed (for example in milliseconds) no longer
+  breaks every sensor on it.
 
 ### Behavior changes
 
