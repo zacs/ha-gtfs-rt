@@ -1,227 +1,268 @@
-import datetime
-import logging
-import requests
-import time
-from enum import Enum
+"""Departure sensors for GTFS-realtime feeds."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
-from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_NAME, UnitOfTime
-import homeassistant.util.dt as dt_util
-from homeassistant.util import Throttle
+from homeassistant.components.sensor import (
+    PLATFORM_SCHEMA as SENSOR_PLATFORM_SCHEMA,
+    SensorDeviceClass,
+    SensorEntity,
+)
+from homeassistant.const import (
+    ATTR_LATITUDE,
+    ATTR_LONGITUDE,
+    CONF_API_KEY,
+    CONF_NAME,
+    CONF_SCAN_INTERVAL,
+    CONF_UNIQUE_ID,
+    UnitOfTime,
+)
+from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+)
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
-_LOGGER = logging.getLogger(__name__)
+from .const import (
+    ATTR_DEPARTURES,
+    ATTR_DUE_AT,
+    ATTR_DUE_IN,
+    ATTR_NEXT_OCCUPANCY,
+    ATTR_NEXT_UP,
+    ATTR_NEXT_UP_DUE_IN,
+    ATTR_OCCUPANCY,
+    ATTR_ROUTE,
+    ATTR_STOP_ID,
+    CONF_APIKEY,
+    CONF_DEPARTURES,
+    CONF_HEADERS,
+    CONF_ROUTE,
+    CONF_STOP_ID,
+    CONF_TRIP_UPDATE_URL,
+    CONF_VEHICLE_POSITION_URL,
+    CONF_X_API_KEY,
+    COUNTDOWN_INTERVAL,
+    DEFAULT_ICON,
+    DEFAULT_NAME,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MAX_LISTED_DEPARTURES,
+    SUBENTRY_TYPE_DEPARTURE,
+    TIME_STR_FORMAT,
+)
+from .coordinator import GtfsRtConfigEntry, GtfsRtCoordinator
+from .feed import Departure
 
-ATTR_STOP_ID = "Stop ID"
-ATTR_ROUTE = "Route"
-ATTR_DUE_IN = "Due in"
-ATTR_DUE_AT = "Due at"
-ATTR_OCCUPANCY = "Occupancy"
-ATTR_NEXT_UP = "Next bus"
-ATTR_NEXT_UP_DUE_IN = "Next bus due in"
-ATTR_NEXT_OCCUPANCY = "Next bus occupancy"
+PARALLEL_UPDATES = 0
 
-CONF_API_KEY = 'api_key'
-CONF_APIKEY = 'apikey'
-CONF_X_API_KEY = 'x_api_key'
-CONF_HEADERS = "headers"
-CONF_STOP_ID = 'stopid'
-CONF_ROUTE = 'route'
-CONF_DEPARTURES = 'departures'
-CONF_TRIP_UPDATE_URL = 'trip_update_url'
-CONF_VEHICLE_POSITION_URL = 'vehicle_position_url'
-
-DEFAULT_NAME = 'Next Bus'
-ICON = 'mdi:bus'
-
-MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(seconds=60)
-TIME_STR_FORMAT = "%H:%M"
-
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Required(CONF_TRIP_UPDATE_URL): cv.string,
-    vol.Exclusive(CONF_API_KEY, "headers"): cv.string,
-    vol.Exclusive(CONF_X_API_KEY, "headers"): cv.string,
-    vol.Exclusive(CONF_APIKEY, "headers"): cv.string,
-    vol.Exclusive(CONF_HEADERS, "headers"): {cv.string: cv.string},
-    vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
-    vol.Optional(CONF_DEPARTURES): [{
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-        vol.Required(CONF_STOP_ID): cv.string,
-        vol.Required(CONF_ROUTE): cv.string
-    }]
-})
-
-class OccupancyStatus(Enum):
-    EMPTY = 0
-    MANY_SEATS_AVAILABLE = 1
-    FEW_SEATS_AVAILABLE = 2
-    STANDING_ROOM_ONLY = 3
-    CRUSHED_STANDING_ROOM_ONLY = 4
-    FULL = 5
-    NOT_ACCEPTING_PASSENGERS = 6
-    NO_DATA_AVAILABLE = 7
-    NOT_BOARDABLE = 8
-
-def due_in_minutes(timestamp):
-    """Get the remaining minutes from now until a given datetime object."""
-    diff = timestamp - dt_util.now().replace(tzinfo=None)
-    return int(diff.total_seconds() / 60)
+PLATFORM_SCHEMA = SENSOR_PLATFORM_SCHEMA.extend(
+    {
+        vol.Required(CONF_TRIP_UPDATE_URL): cv.string,
+        vol.Exclusive(CONF_API_KEY, "headers"): cv.string,
+        vol.Exclusive(CONF_X_API_KEY, "headers"): cv.string,
+        vol.Exclusive(CONF_APIKEY, "headers"): cv.string,
+        vol.Exclusive(CONF_HEADERS, "headers"): {cv.string: cv.string},
+        vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
+        vol.Optional(CONF_DEPARTURES, default=[]): [
+            {
+                vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+                vol.Required(CONF_STOP_ID): cv.string,
+                vol.Optional(CONF_ROUTE): cv.string,
+                vol.Optional(CONF_UNIQUE_ID): cv.string,
+            }
+        ],
+    }
+)
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
-    """Get the Dublin public transport sensor."""
-    headers = config.get(CONF_HEADERS, {})
-    if (api_key := config.get(CONF_API_KEY)) is not None:
-        headers['Authorization'] = api_key
-    elif (apikey := config.get(CONF_APIKEY)) is not None:
-        headers['apikey'] = apikey
-    elif (x_api_key := config.get(CONF_X_API_KEY)) is not None:
-        headers['x-api-key'] = x_api_key
-    data = PublicTransportData(config.get(CONF_TRIP_UPDATE_URL), config.get(CONF_VEHICLE_POSITION_URL), headers)
-    sensors = []
-    for departure in config.get(CONF_DEPARTURES):
-        sensors.append(PublicTransportSensor(
-            data,
-            departure.get(CONF_STOP_ID),
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up sensors from a YAML `sensor: - platform: gtfs_rt` block."""
+    coordinator = GtfsRtCoordinator(
+        hass,
+        None,
+        trip_update_url=config[CONF_TRIP_UPDATE_URL],
+        vehicle_position_url=config.get(CONF_VEHICLE_POSITION_URL),
+        headers=_yaml_headers(config),
+        update_interval=max(
+            config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            DEFAULT_SCAN_INTERVAL,
+        ),
+    )
+    await coordinator.async_register_shutdown()
+    # A failed first poll leaves the entities unavailable until the feed recovers.
+    await coordinator.async_refresh()
+    async_add_entities(
+        GtfsRtDepartureSensor(
+            coordinator,
+            departure[CONF_STOP_ID],
             departure.get(CONF_ROUTE),
-            departure.get(CONF_NAME)
-        ))
+            unique_id=departure.get(CONF_UNIQUE_ID),
+            name=departure[CONF_NAME],
+        )
+        for departure in config[CONF_DEPARTURES]
+    )
 
-    add_devices(sensors, True)
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: GtfsRtConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up one sensor per departure subentry."""
+    for subentry_id, subentry in entry.subentries.items():
+        if subentry.subentry_type != SUBENTRY_TYPE_DEPARTURE:
+            continue
+        async_add_entities(
+            [
+                GtfsRtDepartureSensor(
+                    entry.runtime_data,
+                    subentry.data[CONF_STOP_ID],
+                    subentry.data.get(CONF_ROUTE),
+                    unique_id=subentry_id,
+                    device_info=DeviceInfo(
+                        identifiers={(DOMAIN, subentry_id)},
+                        name=subentry.title,
+                        entry_type=DeviceEntryType.SERVICE,
+                    ),
+                )
+            ],
+            config_subentry_id=subentry_id,
+        )
 
 
-class PublicTransportSensor(SensorEntity):
-    """Implementation of a public transport sensor."""
+def _yaml_headers(config: ConfigType) -> dict[str, str]:
+    """Merge the legacy auth shortcuts into a single header mapping."""
+    headers = dict(config.get(CONF_HEADERS, {}))
+    if (api_key := config.get(CONF_API_KEY)) is not None:
+        headers["Authorization"] = api_key
+    elif (apikey := config.get(CONF_APIKEY)) is not None:
+        headers["apikey"] = apikey
+    elif (x_api_key := config.get(CONF_X_API_KEY)) is not None:
+        headers["x-api-key"] = x_api_key
+    return headers
 
-    def __init__(self, data, stop, route, name):
+
+class GtfsRtDepartureSensor(CoordinatorEntity[GtfsRtCoordinator], SensorEntity):
+    """Minutes until the next departure from a stop, optionally for one route."""
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_translation_key = "departure"
+    _unrecorded_attributes = frozenset({ATTR_DEPARTURES})
+
+    def __init__(
+        self,
+        coordinator: GtfsRtCoordinator,
+        stop_id: str,
+        route_id: str | None,
+        *,
+        unique_id: str | None,
+        name: str | None = None,
+        device_info: DeviceInfo | None = None,
+    ) -> None:
         """Initialize the sensor."""
-        self.data = data
-        self._stop = stop
-        self._route = route
+        super().__init__(coordinator)
+        self._stop_id = stop_id
+        self._route_id = route_id
+        self._attr_unique_id = unique_id
+        if device_info is None:
+            # YAML entities keep their 0.1.0 name and icon so entity IDs and
+            # dashboards are unchanged. Unregistered entities can't use icon
+            # translations, so the icon is set directly.
+            self._attr_name = name
+            self._attr_icon = DEFAULT_ICON
+        else:
+            self._attr_has_entity_name = True
+            self._attr_name = None
+            self._attr_device_info = device_info
+        self._update_from_data()
 
-        self._attr_name = name
-        self._attr_icon = ICON
-        self._attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    async def async_added_to_hass(self) -> None:
+        """Keep the countdown moving between feed polls."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_interval(
+                self.hass,
+                self._async_count_down,
+                COUNTDOWN_INTERVAL,
+                cancel_on_shutdown=True,
+            )
+        )
 
-    def _get_next_buses(self):
-        return self.data.info.get(self._route, {}).get(self._stop, [])
+    @callback
+    def _async_count_down(self, _now: datetime) -> None:
+        self._update_from_data()
+        self.async_write_ha_state()
 
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        next_buses = self._get_next_buses()
-        return due_in_minutes(next_buses[0].arrival_time) if len(next_buses) > 0 else '-'
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_from_data()
+        super()._handle_coordinator_update()
 
-    @property
-    def extra_state_attributes(self):
-        """Return the state attributes."""
-        next_buses = self._get_next_buses()
-        attrs = {
-            ATTR_DUE_IN: self.state,
-            ATTR_STOP_ID: self._stop,
-            ATTR_ROUTE: self._route
+    def _update_from_data(self) -> None:
+        now = dt_util.utcnow()
+        upcoming = self._upcoming(now)
+        self._attr_native_value = (
+            _minutes_until(upcoming[0].time, now) if upcoming else None
+        )
+
+        attrs: dict[str, Any] = {
+            ATTR_DUE_IN: self._attr_native_value if upcoming else "-",
+            ATTR_STOP_ID: self._stop_id,
+            ATTR_ROUTE: self._route_id,
         }
-        if len(next_buses) > 0:
-            attrs[ATTR_DUE_AT] = next_buses[0].arrival_time.strftime(TIME_STR_FORMAT) if len(next_buses) > 0 else '-'
-            attrs[ATTR_OCCUPANCY] = next_buses[0].occupancy
-            if next_buses[0].position:
-                attrs[ATTR_LATITUDE] = next_buses[0].position.latitude
-                attrs[ATTR_LONGITUDE] = next_buses[0].position.longitude
-        if len(next_buses) > 1:
-            attrs[ATTR_NEXT_UP] = next_buses[1].arrival_time.strftime(TIME_STR_FORMAT) if len(next_buses) > 1 else '-'
-            attrs[ATTR_NEXT_UP_DUE_IN] = due_in_minutes(next_buses[1].arrival_time) if len(next_buses) > 1 else '-'
-            attrs[ATTR_NEXT_OCCUPANCY] = next_buses[1].occupancy
-        return attrs
+        if upcoming:
+            first = upcoming[0]
+            attrs[ATTR_DUE_AT] = _local_time(first.time)
+            attrs[ATTR_OCCUPANCY] = first.occupancy
+            if first.latitude is not None and first.longitude is not None:
+                attrs[ATTR_LATITUDE] = first.latitude
+                attrs[ATTR_LONGITUDE] = first.longitude
+        if len(upcoming) > 1:
+            second = upcoming[1]
+            attrs[ATTR_NEXT_UP] = _local_time(second.time)
+            attrs[ATTR_NEXT_UP_DUE_IN] = _minutes_until(second.time, now)
+            attrs[ATTR_NEXT_OCCUPANCY] = second.occupancy
+        attrs[ATTR_DEPARTURES] = [
+            {
+                "route_id": departure.route_id,
+                "trip_id": departure.trip_id,
+                "vehicle_id": departure.vehicle_id,
+                "time": dt_util.as_local(departure.time).isoformat(),
+                "due_in": _minutes_until(departure.time, now),
+                "occupancy": departure.occupancy,
+            }
+            for departure in upcoming[:MAX_LISTED_DEPARTURES]
+        ]
+        self._attr_extra_state_attributes = attrs
 
-    def update(self):
-        """Get the latest data from opendata.ch and update the states."""
-        self.data.update()
+    def _upcoming(self, now: datetime) -> list[Departure]:
+        return [
+            departure
+            for departure in self.coordinator.data.departures.get(self._stop_id, ())
+            if departure.time > now
+            and (self._route_id is None or departure.route_id == self._route_id)
+        ]
 
 
-class PublicTransportData(object):
-    """The Class for handling the data retrieval."""
+def _minutes_until(when: datetime, now: datetime) -> int:
+    return int((when - now).total_seconds() / 60)
 
-    def __init__(self, trip_update_url, vehicle_position_url=None, headers=None):
-        """Initialize the info object."""
-        self._trip_update_url = trip_update_url
-        self._vehicle_position_url = vehicle_position_url
-        self._headers = headers
-        self.info = {}
 
-    @Throttle(MIN_TIME_BETWEEN_UPDATES)
-    def update(self):
-        positions, vehicles_trips, occupancy = self._get_vehicle_positions() if self._vehicle_position_url else [{}, {}, {}]
-        self._update_route_statuses(positions, vehicles_trips, occupancy)
-
-    def _update_route_statuses(self, vehicle_positions, vehicles_trips, vehicle_occupancy):
-        """Get the latest data."""
-        from google.transit import gtfs_realtime_pb2
-
-        class StopDetails:
-            def __init__(self, arrival_time, position, occupancy):
-                self.arrival_time = arrival_time
-                self.position = position
-                self.occupancy = occupancy
-
-        feed = gtfs_realtime_pb2.FeedMessage()
-        response = requests.get(self._trip_update_url, headers=self._headers)
-        if response.status_code != 200:
-            _LOGGER.error("updating route status got {}:{}".format(response.status_code,response.content))
-        feed.ParseFromString(response.content)
-        departure_times = {}
-        
-        for entity in feed.entity:
-            if entity.HasField('trip_update'):
-                route_id = entity.trip_update.trip.route_id
-
-                # Get link between vehicle_id from trip_id from vehicles positions if needed
-                vehicle_id = entity.trip_update.vehicle.id
-                if not vehicle_id:
-                    vehicle_id = vehicles_trips.get(entity.trip_update.trip.trip_id)
-
-                if route_id not in departure_times:
-                    departure_times[route_id] = {}
-                for stop in entity.trip_update.stop_time_update:
-                    stop_id = stop.stop_id
-                    if not departure_times[route_id].get(stop_id):
-                        departure_times[route_id][stop_id] = []
-                    # Keep only future arrival.time (gtfs data can give past arrival.time, which is useless and show negative time as result)
-                    if int(stop.arrival.time) > int(time.time()):
-                        # Use stop departure time; fall back on stop arrival time if not available
-                        details = StopDetails(
-                            datetime.datetime.fromtimestamp(stop.arrival.time),
-                            vehicle_positions.get(vehicle_id),
-                            vehicle_occupancy.get(vehicle_id)
-                        )
-                        departure_times[route_id][stop_id].append(details)
-
-        # Sort by arrival time
-        for route in departure_times:
-            for stop in departure_times[route]:
-                departure_times[route][stop].sort(key=lambda t: t.arrival_time)
-
-        self.info = departure_times
-
-    def _get_vehicle_positions(self):
-        from google.transit import gtfs_realtime_pb2
-        feed = gtfs_realtime_pb2.FeedMessage()
-        response = requests.get(self._vehicle_position_url, headers=self._headers)
-        if response.status_code != 200:
-            _LOGGER.error("updating vehicle positions got {}:{}.".format(response.status_code, response.content))
-        feed.ParseFromString(response.content)
-        positions = {}
-        vehicles_trips = {}
-        occupancy = {}
-
-        for entity in feed.entity:
-            vehicle = entity.vehicle
-            if not vehicle.trip.route_id:
-                # Vehicle is not in service
-                continue
-            positions[vehicle.vehicle.id] = vehicle.position
-            vehicles_trips[vehicle.trip.trip_id] = vehicle.vehicle.id
-            occupancy[vehicle.vehicle.id] = OccupancyStatus(vehicle.occupancy_status).name
-        return positions, vehicles_trips, occupancy
+def _local_time(when: datetime) -> str:
+    return dt_util.as_local(when).strftime(TIME_STR_FORMAT)

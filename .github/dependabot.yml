@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Bumps the Home Assistant test harness, so new HA releases are tested here
+  # before users hit them.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Must stay installable on the oldest supported Home Assistant (see
+      # manifest.json); bump deliberately together with the minimum version.
+      - dependency-name: gtfs-realtime-bindings

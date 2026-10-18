@@ -1,11 +1,12 @@
 {
-    "domain": "gtfs_rt",
-    "name": "GTFS-Realtime",
-    "documentation": "https://github.com/zacs/ha-gtfs-rt",
-    "dependencies": [],
-    "codeowners": ["@zacs"],
-    "version": "1.0.1",
-    "requirements": [
-        "gtfs-realtime-bindings==1.0.0"
-    ]
+  "domain": "gtfs_rt",
+  "name": "GTFS-Realtime",
+  "codeowners": ["@zacs"],
+  "config_flow": true,
+  "documentation": "https://github.com/zacs/ha-gtfs-rt",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/zacs/ha-gtfs-rt/issues",
+  "requirements": ["gtfs-realtime-bindings==2.2.0"],
+  "version": "1.0.0"
 }
