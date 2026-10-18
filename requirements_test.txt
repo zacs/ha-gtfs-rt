@@ -1,0 +1,6 @@
+# Pins Home Assistant itself; Dependabot bumps this so new HA releases are tested.
+pytest-homeassistant-custom-component==0.13.373
+# Must match manifest.json (enforced by tests/test_manifest.py).
+gtfs-realtime-bindings==2.2.0
+mypy==2.4.0
+ruff==0.17.1

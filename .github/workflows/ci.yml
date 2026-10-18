@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # Weekly, so changes to Home Assistant, hassfest or HACS rules surface here first.
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements_test.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+
+  test:
+    name: Tests (Home Assistant ${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Keep in sync with "homeassistant" in hacs.json.
+          - name: 2025.6.0 (minimum)
+            python: "3.13"
+            # pycares 5 postdates this release and breaks its aiodns.
+            install: >-
+              pytest-homeassistant-custom-component==0.13.251
+              gtfs-realtime-bindings==2.2.0
+              "pycares<5"
+              -c https://raw.githubusercontent.com/home-assistant/core/2025.6.0/homeassistant/package_constraints.txt
+          - name: latest
+            python: "3.14"
+            install: -r requirements_test.txt
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install ${{ matrix.install }}
+      - run: pytest --cov --cov-report=term-missing
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Remove once the repository has GitHub topics (e.g. home-assistant, hacs, gtfs).
+          ignore: topics

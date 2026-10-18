@@ -1,0 +1,74 @@
+[project]
+name = "ha-gtfs-rt"
+version = "2.0.0"
+description = "GTFS-Realtime departures for Home Assistant"
+requires-python = ">=3.13"
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "ASYNC", # async pitfalls
+    "B",     # bugbear
+    "BLE",   # blind except
+    "C4",    # comprehensions
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # import sorting
+    "PT",    # pytest style
+    "RUF",   # ruff-specific
+    "SIM",   # simplify
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+ignore = [
+    "E501", # line length is left to the formatter
+]
+
+[tool.ruff.lint.isort]
+# Home Assistant's import layout.
+force-sort-within-sections = true
+combine-as-imports = true
+known-first-party = ["custom_components", "tests"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "homeassistant",
+    "first-party",
+    "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+homeassistant = ["homeassistant"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+files = ["custom_components/gtfs_rt"]
+
+[[tool.mypy.overrides]]
+module = ["google.protobuf.*", "google.transit.*"]
+ignore_missing_imports = true
+
+# Home Assistant aliases `voluptuous` to probatio at runtime, so the real
+# voluptuous types don't match Home Assistant's signatures.
+[[tool.mypy.overrides]]
+module = ["voluptuous", "voluptuous.*"]
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["custom_components/gtfs_rt"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = true
