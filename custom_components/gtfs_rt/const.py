@@ -18,14 +18,14 @@ SUBENTRY_TYPE_DEPARTURE = "departure"
 
 DEFAULT_NAME = "Next Bus"
 DEFAULT_ICON = "mdi:bus"
-# Also the minimum: 1.x throttled every feed to one request per minute.
+# Also the minimum: 0.1.0 throttled every feed to one request per minute.
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
-# How often "Due in" is recalculated from the last poll, as 1.x did.
+# How often "Due in" is recalculated from the last poll, as 0.1.0 did.
 COUNTDOWN_INTERVAL = timedelta(seconds=30)
 TIME_STR_FORMAT = "%H:%M"
 MAX_LISTED_DEPARTURES = 10
 
-# State attribute names from 1.x, kept verbatim so templates and cards keep working.
+# State attribute names from 0.1.0, kept verbatim so templates and cards keep working.
 ATTR_STOP_ID = "Stop ID"
 ATTR_ROUTE = "Route"
 ATTR_DUE_IN = "Due in"

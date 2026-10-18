@@ -8,5 +8,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/zacs/ha-gtfs-rt/issues",
   "requirements": ["gtfs-realtime-bindings==2.2.0"],
-  "version": "2.0.0"
+  "version": "1.0.0"
 }

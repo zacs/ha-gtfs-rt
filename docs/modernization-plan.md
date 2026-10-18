@@ -1,7 +1,7 @@
-# GTFS-Realtime integration — modernization plan (v2.0.0)
+# GTFS-Realtime integration — modernization plan (v1.0.0)
 
 This document records the plan, the design decisions behind it, and the
-backwards-compatibility contract for the 2.0.0 rewrite. It is meant to be read
+backwards-compatibility contract for the 1.0.0 rewrite. It is meant to be read
 by reviewers and future maintainers.
 
 ## 1. Goals
@@ -21,7 +21,7 @@ by reviewers and future maintainers.
    more here than usual: the repository has no releases, so HACS installs
    straight from `master`.
 
-## 2. What was wrong (audit of 1.0.1)
+## 2. What was wrong (audit of 0.1.0)
 
 | Problem | User impact | Issue(s) |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ Key decisions:
   `async_update_reload_and_abort` is mixed with an update listener on
   subentries.
 * **Polling.** 60 s, the same floor as the old `Throttle`. Between polls, each
-  sensor recalculates "Due in" every 30 s from the last data, as 1.x did
+  sensor recalculates "Due in" every 30 s from the last data, as 0.1.0 did
   when HA polled the entity on the sensor default of 30 s. UI entries use a
   fixed interval (quality scale `appropriate-polling`). Users who need
   something else can disable polling and call `homeassistant.update_entity`.
@@ -98,7 +98,7 @@ Key decisions:
 | If a TripUpdate has no `route_id`, use the route from the VehiclePosition for the *same trip*. A position matched only by vehicle ID could be for the vehicle's previous trip. | `route_id` is optional when `trip_id` is present. Some feeds only put it in vehicle positions. |
 | `route` is optional per departure. Omitting it gives "next departure from this stop, any route". | Requested in #3. Works for any feed. |
 | Occupancy and position are only reported when the feed sets them (`HasField`). Names come from the generated enum. | Removes fake `EMPTY` / 0°,0° values. Picks up new spec values for free. |
-| Join TripUpdate → VehiclePosition by vehicle ID, then by trip (`trip_id` + `start_date` + `start_time`). A `trip_id` run by several vehicles at once is never guessed. | The spec identifies frequency-based trip instances by start time. 1.0.1 gave every such trip the last vehicle's position. |
+| Join TripUpdate → VehiclePosition by vehicle ID, then by trip (`trip_id` + `start_date` + `start_time`). A `trip_id` run by several vehicles at once is never guessed. | The spec identifies frequency-based trip instances by start time. 0.1.0 gave every such trip the last vehicle's position. |
 | Timestamps that can't be represented (for example milliseconds) are skipped, not fatal. | One bad value no longer fails the update for every sensor on the feed. |
 | `Accept: application/x-protobuf, application/octet-stream;q=0.9, */*;q=0.8` unless the user sets `Accept`. | Standard content negotiation. Some APIs return JSON or HTML unless asked for protobuf. |
 | If the body is JSON (`{`), parse it with protobuf's own `json_format` (camelCase or snake_case). | A one-byte format check, no per-provider mapping. Covers feeds that only serve JSON (#29). |
@@ -111,7 +111,7 @@ Key decisions:
 
 **Guaranteed unchanged for YAML users** (each item is covered by tests):
 
-* Every 1.0.1 YAML key is accepted with the same meaning: `trip_update_url`,
+* Every 0.1.0 YAML key is accepted with the same meaning: `trip_update_url`,
   `vehicle_position_url`, `headers`, `api_key`, `apikey`, `x_api_key` (still
   mutually exclusive), `departures[].name` (default "Next Bus"), `stopid`,
   `route`. Plus the platform keys `scan_interval` and `entity_namespace`. The
@@ -182,12 +182,12 @@ stale-devices ✅ (HA removes a subentry's device and entities when it's deleted
   (UTC times, fallbacks, cancel/skip, joins, occupancy, JSON, invalid inputs,
   HTTP errors without the URL in messages).
 * `tests/test_sensor_yaml.py`: the compatibility contract in section 5. README
-  and 1.x examples validate. Legacy attribute names and formats. Each auth
+  and 0.1.0 examples validate. Legacy attribute names and formats. Each auth
   shortcut produces the right header. `entity_namespace`, default name and
   `scan_interval` floor. Feed errors → unavailable → recovery.
 * `tests/test_timezone.py`: issue #23 on the real clock, with the OS in Tokyo
   and HA in New York. (freezegun can't model this: it ignores the OS timezone
-  for naive local times.) Putting the 1.0.1 time arithmetic back makes it fail
+  for naive local times.) Putting the 0.1.0 time arithmetic back makes it fail
   with "Due in" 785 instead of 5.
 * `tests/test_config_flow.py`, `tests/test_init.py`,
   `tests/test_diagnostics.py`: UI path, every error branch, reconfigure,
@@ -204,16 +204,20 @@ stale-devices ✅ (HA removes a subentry's device and entities when it's deleted
     reconfigure flow used an API that 2025.6 doesn't have.
   * `hassfest` (HA's manifest/translation/config-flow validator)
   * HACS validation (the `topics` check is skipped until the repository has
-    GitHub topics. 1.0.1's `hacs.json` also used the removed `domains` key, which
+    GitHub topics. 0.1.0's `hacs.json` also used the removed `domains` key, which
     current HACS rejects.)
 * Dependabot keeps the test harness and actions current, so a new HA release
   that breaks something shows up as a red PR instead of a user bug report.
 
 ## 9. Rollout
 
-1. **Before merging, tag the current `master` as `v1.0.1` and publish a GitHub
-   release.** HACS currently installs from the default branch because there
+The original code's manifest said 1.0.1, but it was never released. Releases
+start at 0.1.0 so the rewrite can be 1.0.0.
+
+1. **Before merging, publish `v0.1.0`.** It is the current `master` with only
+   the manifest version set to `0.1.0`, so Home Assistant and HACS show the
+   same number. HACS currently installs from the default branch because there
    are no releases. A release lets users pin or roll back from the HACS UI.
-2. Merge, then publish **`v2.0.0`** with the CHANGELOG's migration notes.
+2. Merge, then publish **`v1.0.0`** with the CHANGELOG's migration notes.
 3. Watch issues for a week. Every behavior change has a test, so regressions
    should land as targeted fixes.

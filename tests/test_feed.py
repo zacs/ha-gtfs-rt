@@ -76,7 +76,7 @@ def test_departure_time_used_when_arrival_missing() -> None:
 
 
 def test_arrival_preferred_over_departure() -> None:
-    """Arrival time stays the primary value, as in 1.x."""
+    """Arrival time stays the primary value, as in 0.1.0."""
     feed = make_feed()
     update = add_trip(feed, "t", "100").stop_time_update.add(stop_id="A")
     update.arrival.time = at(4)

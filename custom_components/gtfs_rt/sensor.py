@@ -181,7 +181,7 @@ class GtfsRtDepartureSensor(CoordinatorEntity[GtfsRtCoordinator], SensorEntity):
         self._route_id = route_id
         self._attr_unique_id = unique_id
         if device_info is None:
-            # YAML entities keep their 1.x name and icon so entity IDs and
+            # YAML entities keep their 0.1.0 name and icon so entity IDs and
             # dashboards are unchanged. Unregistered entities can't use icon
             # translations, so the icon is set directly.
             self._attr_name = name

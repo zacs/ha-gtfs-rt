@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0
+## 1.0.0
 
 A rewrite that brings the integration up to current Home Assistant standards and
 makes it work with more feeds. Existing YAML configurations keep working with the
@@ -54,6 +54,7 @@ same entity IDs and attribute names.
   The value and unit (`min`) are unchanged.
 * Requires Home Assistant 2025.6 or newer, and `gtfs-realtime-bindings` 2.2.0.
 
-## 1.0.1
+## 0.1.0
 
-Last release of the original YAML-only integration.
+The original YAML-only integration. Installs made before this release was
+published show version 1.0.1 in Home Assistant; that is the same code.

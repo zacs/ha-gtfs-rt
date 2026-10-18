@@ -1,6 +1,6 @@
 """Backwards-compatibility tests for YAML-configured sensors.
 
-These pin down the 1.x contract: configuration keys, entity IDs, state and
+These pin down the 0.1.0 contract: configuration keys, entity IDs, state and
 attribute names/formats.
 """
 
@@ -82,7 +82,7 @@ def test_readme_examples_are_valid() -> None:
 @pytest.mark.parametrize(
     "config",
     [
-        # Examples from the 1.0.1 README, including unquoted numeric IDs.
+        # Examples from the 0.1.0 README, including unquoted numeric IDs.
         {
             "platform": "gtfs_rt",
             "trip_update_url": "https://data.texas.gov/download/rmk2-acnw/application%2foctet-stream",
@@ -115,7 +115,7 @@ def test_readme_examples_are_valid() -> None:
     ],
 )
 def test_legacy_configs_are_valid(config: dict[str, Any]) -> None:
-    """Configurations that worked in 1.x still validate."""
+    """Configurations that worked in 0.1.0 still validate."""
     validated = PLATFORM_SCHEMA(config)
     for departure in validated["departures"]:
         assert isinstance(departure["stopid"], str)
@@ -123,14 +123,14 @@ def test_legacy_configs_are_valid(config: dict[str, Any]) -> None:
 
 
 def test_auth_shortcuts_are_mutually_exclusive() -> None:
-    """As in 1.x, only one way of passing credentials is allowed."""
+    """As in 0.1.0, only one way of passing credentials is allowed."""
     with pytest.raises(vol.Invalid):
         PLATFORM_SCHEMA({**YAML_CONFIG, "api_key": "a", "headers": {"b": "c"}})
 
 
 @pytest.mark.usefixtures("new_york", "mock_feeds")
 async def test_state_and_attributes(hass: HomeAssistant) -> None:
-    """State and attributes keep their 1.x names and formats."""
+    """State and attributes keep their 0.1.0 names and formats."""
     await setup_yaml(hass, YAML_CONFIG)
 
     state = hass.states.get(ENTITY_ID)
@@ -174,7 +174,7 @@ async def test_state_and_attributes(hass: HomeAssistant) -> None:
 
 @pytest.mark.usefixtures("mock_feeds")
 async def test_no_upcoming_departures(hass: HomeAssistant) -> None:
-    """With nothing scheduled the state is unknown; attributes keep 1.x values."""
+    """With nothing scheduled the state is unknown; attributes keep 0.1.0 values."""
     await setup_yaml(
         hass,
         {**YAML_CONFIG, "departures": [{"name": "Night owl", "stopid": "999"}]},
@@ -210,7 +210,7 @@ async def test_route_is_optional(hass: HomeAssistant) -> None:
 
 @pytest.mark.usefixtures("mock_feeds")
 async def test_default_name_and_entity_namespace(hass: HomeAssistant) -> None:
-    """The default name and entity_namespace produce the same IDs as 1.x."""
+    """The default name and entity_namespace produce the same IDs as 0.1.0."""
     await setup_yaml(
         hass,
         {
@@ -264,7 +264,7 @@ async def test_auth_headers(
     auth: dict[str, Any],
     expected: dict[str, str],
 ) -> None:
-    """Each auth option sends the same header as in 1.x, to both feeds."""
+    """Each auth option sends the same header as in 0.1.0, to both feeds."""
     await setup_yaml(hass, {**YAML_CONFIG, **auth})
 
     assert mock_feeds.call_count == 2
@@ -376,7 +376,7 @@ async def test_scan_interval_has_one_minute_floor(
     scan_interval: int,
     expected_seconds: int,
 ) -> None:
-    """Shorter intervals were throttled to a minute in 1.x; longer ones are honored."""
+    """Shorter intervals were throttled to a minute in 0.1.0; longer ones are honored."""
     trips, _ = standard_feeds()
     aioclient_mock.get(TRIP_URL, content=trips)
     config = {k: v for k, v in YAML_CONFIG.items() if k != "vehicle_position_url"}
@@ -412,7 +412,7 @@ async def test_countdown_updates_between_polls(
     aioclient_mock: AiohttpClientMocker,
     frozen_time: FrozenDateTimeFactory,
 ) -> None:
-    """As in 1.x, "Due in" is recalculated every 30 s while fetching once a minute."""
+    """As in 0.1.0, "Due in" is recalculated every 30 s while fetching once a minute."""
     trips, _ = standard_feeds()
     aioclient_mock.get(TRIP_URL, content=trips)
     config = {k: v for k, v in YAML_CONFIG.items() if k != "vehicle_position_url"}

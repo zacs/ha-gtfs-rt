@@ -1,6 +1,6 @@
 """Regression test for issue #23: OS and Home Assistant timezones differ.
 
-1.x built arrival times in the OS timezone and compared them with Home
+0.1.0 built arrival times in the OS timezone and compared them with Home
 Assistant's local time, so "Due in" was off by hours in containers. freezegun
 ignores the OS timezone for naive local times, so this test uses the real clock.
 """

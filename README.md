@@ -47,7 +47,7 @@ your sensors are kept.
 
 ## Setup with YAML
 
-YAML configuration from 1.x keeps working unchanged. Each `platform` block is
+YAML configuration from 0.1.0 keeps working unchanged. Each `platform` block is
 one feed, with a list of departures:
 
 ```yaml
@@ -196,7 +196,10 @@ Canceled trips and skipped stops are left out.
   When opening an issue, include the log, your Home Assistant version and, for
   UI setups, the diagnostics file.
 
-## Upgrading from 1.x
+## Upgrading from 0.1.0
+
+(If you installed before releases existed, Home Assistant shows this version
+as 1.0.1.)
 
 Existing YAML keeps working, with the same entity IDs and attribute names. See
 the [changelog](CHANGELOG.md) for the few behavior changes (mostly bug fixes).
