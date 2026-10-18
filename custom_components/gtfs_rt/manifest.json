@@ -4,7 +4,7 @@
     "documentation": "https://github.com/zacs/ha-gtfs-rt",
     "dependencies": [],
     "codeowners": ["@zacs"],
-    "version": "1.0.1",
+    "version": "0.1.0",
     "requirements": [
         "gtfs-realtime-bindings==1.0.0"
     ]
